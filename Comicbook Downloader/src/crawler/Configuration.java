@@ -1,23 +1,24 @@
 package crawler;
 
-public class Properties {
+public class Configuration {
 	private String host;
 	private String port;
-	private String url;
 	private String location;
 	private int pages = 0;
+	private String urlStr;
 	
 	
+	public String getUrlStr() {
+		return urlStr;
+	}
+	public void setUrlStr(String urlStr) {
+		this.urlStr = urlStr;
+	}
 	public int getPages() {
 		return pages;
 	}
 	public void setPages(int pages) {
-		if(this.pages == 0){
-			this.pages = pages;			
-		}else{
-			this.pages += pages;
-		}
-		 
+		this.pages = pages;
 	}
 	public String getLocation() {
 		return location;
@@ -36,12 +37,6 @@ public class Properties {
 	}
 	public void setPort(String port) {
 		this.port = port;
-	}
-	public String getUrl() {
-		return url;
-	}
-	public void setUrl(String url) {
-		this.url = url;
 	}
 
 

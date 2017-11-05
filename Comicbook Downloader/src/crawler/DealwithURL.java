@@ -1,13 +1,8 @@
 package crawler;
 
 import java.io.IOException;
-import java.net.MalformedURLException;
-import java.net.SocketTimeoutException;
-import java.net.URL;
-import java.net.URLConnection;
 import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.Map;
+import java.util.concurrent.BlockingQueue;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -16,14 +11,15 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
 public class DealwithURL implements DealwithURLUtils{
-	visitQuaue Quaue = new visitQuaue();
+	BlockingQueue<Page> queue;
 	Document parser;
 
-    LinkedList<String> result;
-	Pattern addrEndWithJpg = Pattern.compile("//t.*jpg");
-	Pattern addrEndWithPng = Pattern.compile("//t.*png");
-	Pattern addrEndWithgif = Pattern.compile("//t.*gif");
+	final Pattern JPGPATTERNER = Pattern.compile("//t.*jpg");
+	final Pattern PNGPATTERNER = Pattern.compile("//t.*png");
+	final Pattern GIFPATTERNER = Pattern.compile("//t.*gif");
 	Matcher match;
+	private int retryCnt;
+	private int MAXCNT = 5;
 	
 	/*  
 	 *nhentai
@@ -35,20 +31,27 @@ public class DealwithURL implements DealwithURLUtils{
 	 * https//t.nhentai.net/galleries/959435/1t.jpg
 	 * https//i.nhentai.net/galleries/959435/1.jpg
 	 */
-	public LinkedList<String> getSource(String url)
+	public DealwithURL(BlockingQueue<Page> queue){
+		this.queue = queue;
+	}
+	
+	public Book getSource(String url)
 	{
-		
+		Book book = new Book();
+		book.setUrl(url);
 		System.out.println(url);
 	     try {
 			parser = Jsoup.connect(url).userAgent("Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/47.0.2526.106 Safari/537.36").get();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			getSource(url);
+			if(++retryCnt != MAXCNT){
+				System.out.println("retry......");
+				getSource(url);
+			}
+			e.printStackTrace();
 		}
-	    result = new LinkedList<String>();
 	    /*
-	     * add title as the fisrst one
-	     * remove special symbol
+	     * title
+	     * 
 	     */
 	    String title = parser.getElementById("info").child(1).tagName();
 	    if(title.equals("h2")){
@@ -57,38 +60,46 @@ public class DealwithURL implements DealwithURLUtils{
 	    else{
 	    	title = parser.getElementById("info").child(0).ownText();
 	    }
-	    //去除特殊符号
-	    result.add(title.replaceFirst(":","").replaceFirst("\\+","").replaceFirst("/","").
+	    
+	    book.setTitle(title.replaceFirst(":","").replaceFirst("\\+","").replaceFirst("/","").
 	    		replaceAll("\\?", "").replaceAll("\\|", "").replaceAll("/", "").replaceAll(":", "").replace("*", ""));
-	    //iterator in jsoup
+	    //get pages in a book
 	    Iterator<Element> iterator =  parser.getElementsByAttributeValue("class", "lazyload").iterator();
-	    /*
-	     * 处理jpg，gif，png格式，若还有其他格式再加
-	     */
 	    while(iterator.hasNext())
 	    {
 	    	String temp  = iterator.next().toString();
-	    	match = addrEndWithJpg.matcher(temp);
-	    	if(match.find())
-	    	{
-	    		result.add("https:"+match.group().replaceAll("//t", "//i").replaceAll("t.jpg", ".jpg"));	    
+	    	if(temp.contains("thumb")||temp.contains("cover")){
 	    		continue;
-	    	}else{
-	    		match = addrEndWithPng.matcher(temp);
 	    	}
+	    	match = JPGPATTERNER.matcher(temp);
 	    	if(match.find())
 	    	{
-	    		result.add("https:"+match.group().replaceAll("//t", "//i").replaceAll("t.png", ".png"));	 
+	    		book.getUrls().add("https:"+match.group().replaceAll("//t", "//i").replaceAll("t.jpg", ".jpg"));	    
 	    		continue;
-	    	}else{
-	    		match = addrEndWithgif.matcher(temp);	    			    		
-	        }
-	    	match.find();
-	    	result.add("https:"+match.group().replaceAll("//t", "//i").replaceAll("t.gif", ".gif"));	 
+	    	}
+	    	
+	    	match = PNGPATTERNER.matcher(temp);
+	    	if(match.find())
+	    	{
+	    		book.getUrls().add("https:"+match.group().replaceAll("//t", "//i").replaceAll("t.png", ".png"));	 
+	    		continue;
+	    	}
+	    	
+	    	match = GIFPATTERNER.matcher(temp);	    			
+	    	if(match.find()){
+	    		book.getUrls().add("https:"+match.group().replaceAll("//t", "//i").replaceAll("t.gif", ".gif"));
+	    	}
+	    		 
 	    }
-
-	    			      	   	   
-	    return result;
+	    
+	    for(String pageUrl : book.getUrls()){
+	    	Page page = new Page();
+	    	page.setUrl(pageUrl);
+	    	page.setTitle(book.getTitle());
+	    	queue.add(page);
+	    }
+	    
+	    return book;
 	}	
 	
 }

@@ -1,35 +1,27 @@
 package crawler;
 
 import java.awt.BorderLayout;
-import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
-import java.awt.Graphics;
-import java.awt.GridLayout;
-import java.awt.Insets;
-import java.awt.TextArea;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.net.ProxySelector;
 import java.util.LinkedList;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 
 import javax.swing.BorderFactory;
-import javax.swing.BoxLayout;
-import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
-import javax.swing.border.Border;
 
 public class GUI implements ActionListener{
 	//GUI componets
@@ -41,7 +33,7 @@ public class GUI implements ActionListener{
 	JTextField port;
 	JTextField host;
 	JTextArea progress;
-	JComboBox proxy;
+	JComboBox<String> proxy;
 	JFileChooser choose;
 	JButton filechose;
 	JTextField filepath;
@@ -49,44 +41,45 @@ public class GUI implements ActionListener{
 	JScrollPane output;
 	JPanel textArea;
 	
-	static Properties properties = new Properties();
+	static Configuration conf = new Configuration();
+	private LinkedList<String> urlLst = new LinkedList<String>();
+	static BlockingQueue<Page> queue = new LinkedBlockingQueue<>(500);
+	
 	public static void main(String[] args)
 	{
-
 		GUI userInterface = new GUI();
-		
 
 	}
 	public void start(JTextArea showArea,JTextArea progress)
 	{
 		//set proxy configure
 		System.setProperty("http.proxySet", "true"); 
-		System.setProperty("http.proxyHost", properties.getHost()); 
-		System.setProperty("http.proxyPort", properties.getPort());
-		DealwithURL urlResolver = new DealwithURL();	
+		System.setProperty("http.proxyHost", conf.getHost()); 
+		System.setProperty("http.proxyPort", conf.getPort());
+		DealwithURL urlResolver = new DealwithURL(queue);	
 		int count = 1;
-		int total = properties.getUrl().split(";").length;
-		//Ê¹ÓÃÏß³Ì³ØÏÂÔØ
-		ExecutorService Threadpool = Executors.newFixedThreadPool(20);
-		for (String url2 : properties.getUrl().split(";")) {
-			LinkedList<String> content = urlResolver.getSource(url2);
-			properties.setPages(content.size());
+		int total = conf.getUrlStr().split(";").length;
+		
+		//start
+		for (String singleUrl : conf.getUrlStr().split(";")) {
+			urlLst.add(singleUrl);
 		}
-		System.out.println(properties.getPages());
-		for (String url2 : properties.getUrl().split(";")) {
+		
+		ExecutorService Threadpool = Executors.newFixedThreadPool(5);
+		for(String url : urlLst) {
 			progress.setText("     " + count++ + "/" + total);
-			LinkedList<String> content = urlResolver.getSource(url2);
-            String title = new String();
-            title = content.removeFirst();
-			showArea.append("Title: " + title + "\n" + "total pages: " + properties.getPages() + "\n");
-			if (new DownloadComickbook(properties).isDownloaded(title)) {
-				showArea.append("document already exists");
-				return;
+			Book book = urlResolver.getSource(url);
+			showArea.append("Title: " + book.getTitle() + "\n" + "total pages: " + book.getPagesCnt() + "\n");
+			if (new DownloadComickbook(conf).isDownloaded(book.getTitle())) {
+				showArea.append("comic book "+book.getTitle()+" already exists");
+				continue;
 			}
-			for (int i = 0; i < content.size(); i++) {
-				Threadpool.execute(new DownloadComickbook(content.get(i), properties, showArea , title ,progress));
-			}
+			conf.setPages(book.getPagesCnt()+conf.getPages());
 		}
+		for (int i = 0; i < 20; i++) {
+			Threadpool.execute(new DownloadComickbook(conf, showArea ,progress,queue));
+		}
+		
 		System.setProperty("http.proxySet", "false");
 	}
 	public GUI()
@@ -101,7 +94,7 @@ public class GUI implements ActionListener{
 		url = new JTextField();
 		port = new JTextField();
 		host = new JTextField();
-		proxy = new JComboBox();
+		proxy = new JComboBox<String>();
 		choose = new JFileChooser();
 		filechose = new JButton("...");
 		filechose.addActionListener(this);
@@ -117,7 +110,7 @@ public class GUI implements ActionListener{
 		progress.setBorder(BorderFactory.createLoweredBevelBorder());
 		filepath.setPreferredSize(new Dimension(145,25));
 		//private path
-		filepath.setText("F:/±¾×Ó/Ñ¸À×ÏÂÔØ");
+		filepath.setText("F:/ï¿½ï¿½ï¿½ï¿½/Ñ¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½");
 		filechose.setPreferredSize(new Dimension(20,20));
 		proxy.setPreferredSize(dimension);
 		proxy.addItem("customize");
@@ -125,8 +118,8 @@ public class GUI implements ActionListener{
 		proxy.addItem("freegate");
 		proxy.addActionListener(this);
 		
-		choose.setApproveButtonText("È·¶¨");  
-		choose.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);  //ÉèÖÃÖ»Ñ¡ÔñÄ¿Â¼
+		choose.setApproveButtonText("È·ï¿½ï¿½");  
+		choose.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);  //ï¿½ï¿½ï¿½ï¿½Ö»Ñ¡ï¿½ï¿½Ä¿Â¼
 		textPanel.add(new JLabel("proxy"));
 		textPanel.add(proxy);
 		textPanel.add(new JLabel("host  "));
@@ -152,8 +145,6 @@ public class GUI implements ActionListener{
 		output = new JScrollPane(status);
 		output.setPreferredSize(new Dimension(200, 200));
 		textArea.add(output);
-		
-		
 				
 		con.setLayout(new BorderLayout());
 		con.add(textPanel,BorderLayout.NORTH);
@@ -166,7 +157,6 @@ public class GUI implements ActionListener{
 	}
 	@Override
 	public void actionPerformed(ActionEvent e) {
-		// TODO Auto-generated method stub
         if(e.getSource().equals(proxy))
         {
         	if(proxy.getSelectedIndex()==1)
@@ -198,10 +188,11 @@ public class GUI implements ActionListener{
         	if(port.getText()!=null&&host.getText()!=null&&url.getText()!=null&&filepath.getText()!=null)
         	{
         		status.setText("");
-        		properties.setHost(host.getText());
-        		properties.setLocation(filepath.getText());
-        		properties.setPort(port.getText());
-        		properties.setUrl(url.getText());
+        		conf.setHost(host.getText());
+        		conf.setLocation(filepath.getText());
+        		conf.setPort(port.getText());
+        		conf.setUrlStr(url.getText());
+        		progress.setText("");
         		start(status,progress);
         	}
         	else {
